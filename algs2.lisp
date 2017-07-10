@@ -745,3 +745,66 @@
 
 (defparameter *probs* #(0 5 10 2 3 4))
 (defparameter *A* (make-array '( 6 6  ) :initial-element 0))
+
+
+
+
+
+
+
+;;;;;implement quicksort from previous
+(defun qs (arr)
+  (quicksort arr 0 (1- (length arr)) #'>=))
+
+(defun qs2 (arr)
+  (quicksort arr 0 (1- (length arr)) #'<=))
+
+(defun quicksort (arr st end &optional (fn #'>=))
+  (let ((pivot-index st)) ;just pick the st as a defult value for it
+    (if (> (- end st) 0)
+	(progn
+	  (setf pivot-index (partition arr st end fn))
+	  (quicksort arr st (1- pivot-index) fn)
+	  (quicksort arr (1+ pivot-index) end fn))))
+  arr)
+
+;destructive method that returns the pivot-index
+(defun partition (arr st end &optional (fn #'>=))
+  (let* ((pivot (choose-pivot arr st end)) ;(aref arr st)) ;pick first element for now; add choose pivot here to see how the pivot affects the output
+	 (i st);assume pivot is or has been moved to the first position
+	 (j (+ i 1)))
+    (while (<= j end)
+      (when (funcall fn pivot (aref arr j)) ;need the invariant to hold-- looking at the case where plllhhhLu
+	(incf i)
+	(swap arr i j)) ;; will make sure we have the following in the array plllhhhhu -- pretend the u is actually a value less than p and then notice after the swap it will look like pllllhhhh, now we just need the pivot to go between the l(lower than pivot) and hs (higer than pivot)
+      (incf j))
+    (swap arr st i);the final swap moves the pivot inbetween the low and highs ie llllphhhh
+    i));need to return the index of the pivot 
+
+;destructive swap of elements in an array
+(defun swap (arr i j)
+  (let ((temp (aref arr i)))
+    (setf (aref arr i) (aref arr j)
+	  (aref arr j) temp)))
+	   
+(defun get-file-qs (path arr)
+  (with-open-file (str path :direction :input)
+    (do ((line (read-line str nil 'eof) (read-line str nil 'eof)) ; var initial update
+	 (i 0 (incf i)))
+	((eql line 'eof)) ;stopping condtions
+	     ;(> i 20)))
+      (push (parse-integer (cl-ppcre:scan-to-strings "\\d+" line)) arr)))
+  (make-array (length arr) :initial-contents (nreverse arr)))
+
+
+;destuctive method that chooses a pivot at random and then 
+(defun choose-pivot (arr st end)
+  (let ((pivot-index (+ st (random (1+ (- end st))))))
+    (swap arr pivot-index st)))
+
+;;note quicksort will affect the actual array
+(defparameter *arr-qs* nil)
+(setf *arr-qs* (get-file-qs "/home/bear/Downloads/QuickSort.txt" *arr-qs*))
+(time (qs *arr-qs*));; notic that using choose-pivot ends up reducing overall time and number of swaps necessary
+
+
