@@ -753,10 +753,18 @@
 
 
 ;;;;;implement quicksort from previous
+(defparameter *num-comparisons* 0) ;just a quick way to see how much the pivot moved
+
 (defun qs (arr)
-  (quicksort arr 0 (1- (length arr)) #'>=))
+  (setf *num-comparisons* 0)
+  (quicksort arr 0 (1- (length arr)) #'>=)
+  (print *num-comparisons*)
+  (print (- 73848 *num-comparisons*))) ;;compare it to just picking the first number
+  
+
 
 (defun qs2 (arr)
+  (setf *num-comparisons* 0)
   (quicksort arr 0 (1- (length arr)) #'<=))
 
 (defun quicksort (arr st end &optional (fn #'>=))
@@ -764,6 +772,7 @@
     (if (> (- end st) 0)
 	(progn
 	  (setf pivot-index (partition arr st end fn))
+	  (incf *num-comparisons* (- end pivot-index)) ;;lets see how much the pivot moved - 50% chance we pick a good enough pivot so the split on both sides should be pretty good
 	  (quicksort arr st (1- pivot-index) fn)
 	  (quicksort arr (1+ pivot-index) end fn))))
   arr)
@@ -774,11 +783,12 @@
 	 (i st);assume pivot is or has been moved to the first position
 	 (j (+ i 1)))
     (while (<= j end)
-      (when (funcall fn pivot (aref arr j)) ;need the invariant to hold-- looking at the case where plllhhhLu
+      (when (funcall fn pivot (aref arr j)) ;need the invariant to hold-- looking at the case where plllhhhLu with L being current element
+	;(incf *num-comparisons*)
 	(incf i)
-	(swap arr i j)) ;; will make sure we have the following in the array plllhhhhu -- pretend the u is actually a value less than p and then notice after the swap it will look like pllllhhhh, now we just need the pivot to go between the l(lower than pivot) and hs (higer than pivot)
+	(swap arr i j)) ;; will make sure we have the following in the array plllhhhL -- pretend L is actually a value less than p and then notice after the swap it will look like plllLhhh, now we just need the pivot to go between the l(lower than pivot) and hs (higer than pivot) -- someting like Llllphhh
       (incf j))
-    (swap arr st i);the final swap moves the pivot inbetween the low and highs ie llllphhhh
+    (swap arr st i);the final swap moves the pivot inbetween the low and highs ie Llllphhhh
     i));need to return the index of the pivot 
 
 ;destructive swap of elements in an array
@@ -797,14 +807,58 @@
   (make-array (length arr) :initial-contents (nreverse arr)))
 
 
-;destuctive method that chooses a pivot at random and then 
+;destuctive method that chooses a pivot at random and then swap it to the first position 
 (defun choose-pivot (arr st end)
   (let ((pivot-index (+ st (random (1+ (- end st))))))
     (swap arr pivot-index st)))
 
+(defun choose-pivot1 (arr st end)
+  (swap arr st st))
+
+(defun choose-pivot-midpoint (arr st end)
+  (let* ((a (sort (copy-seq (subseq arr st end)) #'<))
+	 (midpoint-elem (aref a (floor (/ (length a) 2))))
+	 (mid-index st))
+    ;(print a)
+    ;(print midpoint-elem)
+    (for (x st end)
+      (if (equalp midpoint-elem (aref arr x))
+	  (setf mid-index x)))
+    ;(print mid-index)
+    ;(print (subseq arr st end))
+    (swap arr st mid-index)))
+	  
+	       
 ;;note quicksort will affect the actual array
 (defparameter *arr-qs* nil)
-(setf *arr-qs* (get-file-qs "/home/bear/Downloads/QuickSort.txt" *arr-qs*))
-(time (qs *arr-qs*));; notic that using choose-pivot ends up reducing overall time and number of swaps necessary
+(time (setf *arr-qs* (get-file-qs "/home/bear/Downloads/QuickSort.txt" *arr-qs*)))
+(time (qs *arr-qs*));; notice that using choose-pivot ends up reducing overall time and number of swaps necessary
+;;run the last statement a few times in a row with the different pivot choices looks to me that just a random pivot seems best - also could do a median of 3
+
+;;get the 5th order statictic from an array for example
+;;key it's use partition and realize that it works kind of like binary search since the pivot-index choosen at random will always be in the right spot relative to where you're looking
+(defun rselect (arr st end i)
+  ;(format t "i:~a, st:~a, end:~a array=~a ~%"i st end (subseq arr st (1+ end)))
+  (when (>= (- end st) 0)
+    (let ((pivot-index (partition arr st end)))
+      ;(format t "pivot-index:~a, array=~a ~%" pivot-index (subseq arr st (1+ end)) )
+      (cond ((equalp i pivot-index)
+	     (aref arr pivot-index))
+	    ((> i pivot-index) ;xxxxpxixxx ;case where it's on the right hand side
+	     ;(format t "i>pivot pivindex: ~a, a[~a]=~a, i:~a, st:~a, end:~a~%" pivot-index pivot-index (aref arr pivot-index) i st end )
+	     (rselect arr (1+ pivot-index) end i)) ; (1- (- i pivot-index)))) ;note if it's on the rgith side we want the 
+	    (t ;xxixxpxxxxxx ;ith order statistic is in the left side
+	     ;(format t "i<pivot pivindex: ~a, a[~a]=~a, i:~a, st:~a, end:~a~%" pivot-index pivot-index (aref arr pivot-index) i st end )
+	     (rselect arr st (1- pivot-index) i)))))) ; (- i st)) )))))
+;;;note we're always passing the full array so i just stays the same - drew it out and don't need to mess with i if we're always passing the whole array through (espically sine partition messes up the order of the elements in the array
+
+;;notice how this is better than sorting then then finding the xth element
+;;faster than nlogn 
+(defun ith-order-statistic (arr i)
+  (rselect arr 0 (1- (length arr)) (1- i)))
+
+;(ith-order-statistic #(10 8 2 4) 3); returns 8
+;(ith-order-statistic *arr-qs* 3123); returns 3123 but doesn't sort the array!
+;(ith-order-statistic *arr-qs* 10001) ; nil
 
 
