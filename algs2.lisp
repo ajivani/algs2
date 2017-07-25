@@ -752,7 +752,7 @@
 
 
 
-;;;;;implement quicksort from previous
+;;;;;implement quicksort from previous discussion;;;;;;;;;;;;
 (defparameter *num-comparisons* 0) ;just a quick way to see how much the pivot moved
 
 (defun qs (arr)
@@ -862,3 +862,148 @@
 ;(ith-order-statistic *arr-qs* 10001) ; nil
 
 
+;;mergesort
+
+(defvar *num-split-invariants* 0)
+
+(defun mergevec (arr1 arr2)
+  (let ((res (make-array (+ (length arr1) (length arr2))))
+	(i 0)
+	(j 0)
+	(rr 0))
+    (while (< rr (length res))
+      (cond ((and (>= j (length arr2)) (>= i (length arr1))) ;reached end of both
+	     res)
+	    ((and (>= j (length arr2)) (< i (length arr1))) ;arr1 bigger than arr2
+	     (setf (aref res rr) (aref arr1 i))
+	     (incf i))
+	    ((and (>= i (length arr1)) (< j (length arr2))) ;arr2 > arr1
+	     (setf (aref res rr) (aref arr2 j))
+	     (incf j))
+	    ((<= (aref arr1 i) (aref arr2 j)) ;;pick smaller element to go into results
+	     (setf (aref res rr) (aref arr1 i))
+	     (incf i))
+	    (t ;;means arr2[j] is smaller than arr1[i]
+	     (incf *num-split-invariants* (- (length arr1) i))
+	     (setf (aref res rr) (aref arr2 j))
+	     (incf j)))
+      (incf rr))
+    res))
+
+;;key points of mergesort if there's one element create a new array (for the merge part)
+;;the (merge (mergesort first-part-of-array) (mergesort second-part-of-array))
+
+(defun mergesort (arr st end)
+  (cond ((> st end)
+	 nil) ;an empty array
+	((= st end)
+	 (make-array 1 :initial-element (aref arr st))) ;;a vector of one element (at the bottom level) 
+	(t ;array has more than one element
+	 (let ((result nil)
+	       (midpoint (+ st (floor (- end st) 2))))
+	   (setf result (mergevec (mergesort arr st midpoint) ;
+				  (mergesort arr (1+ midpoint) end)))
+	   result))))
+
+
+(defun ms (arr)
+  (setf *num-split-invariants* 0)
+  (values (mergesort arr 0 (1- (length arr))) *num-split-invariants*))
+  
+
+;(time (ms *arr-qs*))
+
+
+
+;;;;implement implement a random contraction alg to get the min cut of a graph
+;;;;minimum cut alg - theory is that if you run it many times you'll eventually get the right answer!
+;;just need 2 strutures
+;;vector of just all the vertices
+;;the actual adjency list as a hashtable who's value is a hashtable as well { 1 : { 3:1 4:1} }; 
+
+(defun dl-and-make-graph (filepath)
+  (let ((ht-v (make-hash-table))
+	(lst-v nil)
+	(li nil)
+	(adj-list (make-hash-table :test 'equalp)))	  
+    (with-open-file (str filepath :direction :input)
+      (do ((line (read-line str nil 'eof) (read-line str nil 'eof)))
+	  ((or (eql line 'eof) (eql nil line)))
+	(setf li (cl-ppcre:split "\\s+" line))
+	(let ((vert (parse-integer (car li)))
+	      (edge-vert-lst (cdr li)))
+	  (setf (gethash vert ht-v) t); just a list of 
+	  (push vert lst-v) ;;just a big list of vertices
+	  (setf (gethash vert adj-list) (make-hash-table)) ; the adjency list rep of the graph/network
+	  (dolist (v edge-vert-lst)
+	    (let ((adj-list-ht (gethash vert adj-list)))
+	      (setf (gethash (parse-integer v) adj-list-ht) 1)))))) ;make sure to parse it as an integer here otherwise it'll go in as "133":1 instead of 133:1 key value pairing
+    (values adj-list ht-v lst-v)))
+
+;will pick a radom edge form an adjaency list - ie (1 200 1) the two nodes and the number
+(defun pick-rand-edge (adj-lst vert-lst)
+  (let* ((edge1 (nth (random (length vert-lst)) vert-lst))
+	 (node-conn-ht (gethash edge1 adj-lst)))
+    (cons edge1 (pick-rand-edge-from-ht node-conn-ht))))
+
+(defun pick-rand-edge-from-ht (ht-edges)
+  (let ((rand-pick (random (hash-table-count ht-edges)))
+	(i 0)
+	(edge2 0)
+	(num-edges 0))
+    (block stop-mapping
+      (maphash #'(lambda (k v)	       
+		   (when (= i rand-pick)
+		     (setq edge2 k
+			   num-edges v)
+		     (return-from stop-mapping))
+		 (incf i))		     
+	     ht-edges))
+    (list edge2 num-edges)))
+
+   
+(defun rand-contraction-alg (&optional (filepath "/home/bear/Downloads/kargerMinCut.txt" ))
+  (let ((adj-lst nil)
+	(vertices-ht nil)
+	(vertices nil)
+	(e1-e2-v-lst nil)
+	(edge1 nil)
+	(edge2 nil)
+	(num-edge-conns 0))
+    (multiple-value-setq (adj-lst vertices-ht vertices)
+      (dl-and-make-graph filepath))
+    (setf e1-e2-v-lst (pick-rand-edge adj-lst vertices))
+    (setf edge1 (first e1-e2-v-lst)
+	  edge2 (second e1-e2-v-lst)
+	  num-edge-conns (third e1-e2-v-lst))
+    (format t "~a ~a ~a" edge1 edge2 num-edge-conns)
+    (combine-verticies edge1 edge2 num-edge-conns adj-lst vertices)))
+
+;(defun combine-verticies (edge1 edge2 num-edges adj-lst vertices)
+;  (let ((edge2-connections-ht (gethash edge2 adj-lst)))
+;    (maphash #'(lambda (k v)
+;		 (combine-edge-and-upd k 
+;	     ())))))	  
+;(combine-edge 33 183 161 1 h)
+
+
+;;;bookeeping for merging nodes 183 and 33 (edge 33 will be gone) and updating one of the edges 33 has ie edge 48 for exmaple
+;;updates the edge that's going away - need to also update the new edge
+(defun combine-edge-and-update-cuts (old-edge new-edge edge-to-update old-edge-new-edge-num-cuts adj-list vertices) 
+  (let ((val-new-edge (gethash new-edge (gethash edge-to-update adj-list)))) ;if the new edge is already in this list
+    (if val-new-edge
+	(setf (gethash new-edge (gethash edge-to-update adj-list)) (+ val-new-edge old-edge-new-edge-num-cuts)) ;;the hashtable for node 48 needs to updated to remove 33 and have a line like { .. 183:2 .. } since 183 already had a single connection to   
+	(setf (gethash new-edge (gethash edge-to-update adj-list)) old-edge-new-edge-num-cuts))
+    ;;now the new-edge hash needs it's own table updated to reflect the change that were just made -- ie in our example edge 183 needs to have in it's hash a line like {... 48:2 ...} since that's the updated value for hash 48: { 183:2 }
+    (setf (gethash edge-to-update (gethash new-edge adj-list))
+	  (gethash new-edge (gethash edge-to-update adj-list))
+    (remhash old-edge (gethash edge-to-update adj-list))
+    (setf vertices (delete old-edge vertices)))
+    (print "_______")
+    (qp-hashtable (gethash new-edge adj-list))
+    (print " ")
+    (qp-hashtable (gethash edge-to-update adj-list))))
+
+	
+    
+  
