@@ -920,8 +920,16 @@
 ;;just need 2 strutures
 ;;vector of just all the vertices
 ;;the actual adjency list as a hashtable who's value is a hashtable as well { 1 : { 3:1 4:1} }; 
+(defparameter *vertices* '())
+(defparameter *adj-lst* '())
+(defparameter *ht-v* (make-hash-table))
+(defparameter *lowest-min-counts* 999999)
+(defparameter *curr-min-count* 999999999)
 
 (defun dl-and-make-graph (filepath)
+  (setf *vertices* '()
+	*adj-lst* nil
+	*ht-v* (make-hash-table))
   (let ((ht-v (make-hash-table))
 	(lst-v nil)
 	(li nil)
@@ -944,7 +952,8 @@
 (defun pick-rand-edge (adj-lst vert-lst)
   (let* ((edge1 (nth (random (length vert-lst)) vert-lst))
 	 (node-conn-ht (gethash edge1 adj-lst)))
-    (cons edge1 (pick-rand-edge-from-ht node-conn-ht))))
+    ;(format t "edge1:~a node-conn-ht:~a~%" edge1 node-conn-ht)
+    (values edge1 (first (pick-rand-edge-from-ht node-conn-ht)))))
 
 (defun pick-rand-edge-from-ht (ht-edges)
   (let ((rand-pick (random (hash-table-count ht-edges)))
@@ -961,24 +970,87 @@
 	     ht-edges))
     (list edge2 num-edges)))
 
-   
-(defun rand-contraction-alg (&optional (filepath "/home/bear/Downloads/kargerMinCut.txt" ))
-  (let ((adj-lst nil)
-	(vertices-ht nil)
-	(vertices nil)
-	(e1-e2-v-lst nil)
-	(edge1 nil)
-	(edge2 nil)
-	(num-edge-conns 0))
-    (multiple-value-setq (adj-lst vertices-ht vertices)
-      (dl-and-make-graph filepath))
-    (setf e1-e2-v-lst (pick-rand-edge adj-lst vertices))
-    (setf edge1 (first e1-e2-v-lst)
-	  edge2 (second e1-e2-v-lst)
-	  num-edge-conns (third e1-e2-v-lst))
-    (format t "~a ~a ~a" edge1 edge2 num-edge-conns)
-    (combine-verticies edge1 edge2 num-edge-conns adj-lst vertices)))
 
+
+(defun rand-cont-alg (&optional (filepath "/home/bear/Downloads/kargerMinCut.txt"))
+  (let ((adjlst nil)
+	(verts nil)
+	(curr-min-cut 999999)
+	(i 2000))
+    (multiple-value-setq (adjlst *ht-v* verts) (dl-and-make-graph filepath))
+    (while (> i 0)
+      (decf i)
+      (multiple-value-setq (*adj-lst* *ht-v* *vertices*) (dl-and-make-graph filepath))
+      ;(setf *adj-lst*  (alexandria:copy-hash-table adjlst)
+      ;*vertices* (copy-list verts))
+  ;    (print "starting again")
+   ;   (break)
+      (combine-all-edges *adj-lst*)
+  ;    (break)
+      ;(print (car *vertices*))
+      (maphash #'(lambda (key val)
+;		   (format t "~%~a : ~a~%" key val)
+		   (setf *curr-min-count* val))
+	       (gethash (car *vertices*) *adj-lst*))
+      ;(format t "currmin count: ~a ~%" *curr-min-count*)
+      (if (<= *curr-min-count*  *lowest-min-counts*)
+	  (setf *lowest-min-counts* *curr-min-count*)))))
+;      (format t "over min count ~a ~%"*lowest-min-counts*))))
+    ;*lowest-min-counts*)))
+	
+
+(defun combine-all-edges (adj-lst)
+  (let ((old-edge nil)
+	(new-edge nil))
+    (while (> (length *vertices*) 2)
+      (multiple-value-setq (old-edge new-edge) (pick-rand-edge adj-lst *vertices*))
+      ;(format t "~a -> ~a~%" old-edge new-edge)
+      (combine-edge old-edge new-edge adj-lst))))
+
+
+;;updates all the values that old edge connects
+(defun combine-edge (old-edge new-edge adj-lst)
+  ;(format t "ce ~a , ~a~%" old-edge new-edge)
+  (let ((old-edge-conns-ht (gethash old-edge adj-lst))
+	(lst-edges-to-update nil))
+    (if (hash-table-count old-edge-conns-ht)
+	(progn
+	  (maphash #'(lambda (k v) (push k lst-edges-to-update)) old-edge-conns-ht)
+	  ;(format t "~a , ~a, ~a~%" old-edge new-edge lst-edges-to-update)
+	  (mapcar  #'(lambda (update-edge)
+		       (when update-edge
+;			 (format t "~a , ~a, ~a~%" old-edge new-edge update-edge)
+			 (combine-edge-helper old-edge new-edge update-edge adj-lst)))
+		   lst-edges-to-update)))
+ ;   (format t "vv=~a~%" *vertices*)
+    (setf *vertices* (remove old-edge *vertices*))
+ ;   (format t "v2=~a~%" *vertices*)
+    (remhash old-edge adj-lst)))
+	  
+
+;;think of 1<-2->3 and merge 2 and 3 
+;;eg combine 33 183 update 48
+(defun combine-edge-helper (old-edge new-edge update-edge adj-lst)  
+  (cond ((= update-edge new-edge)
+	 (remhash old-edge (gethash new-edge adj-lst))) ;;remove 33 from 183
+	(t (when (not (null update-edge))
+	     (let ((update-edge-conns-ht (gethash update-edge adj-lst))
+		   (new-edge-conns-ht (gethash new-edge adj-lst))
+		   (old-edge-conns-ht (gethash old-edge adj-lst)))
+	       (cond ((and (gethash new-edge update-edge-conns-ht) (gethash old-edge update-edge-conns-ht)) 
+		      (setf (gethash new-edge update-edge-conns-ht) 
+			    (+ (gethash new-edge update-edge-conns-ht) (gethash old-edge update-edge-conns-ht)))
+		      (setf (gethash update-edge new-edge-conns-ht) (gethash new-edge update-edge-conns-ht))
+		      (remhash old-edge update-edge-conns-ht) ;;remove 33 from 48
+		      (remhash old-edge new-edge-conns-ht)) ;;remove 33 from 183
+		     ((and (null (gethash new-edge update-edge-conns-ht)) (gethash old-edge update-edge-conns-ht))
+		      (setf (gethash new-edge update-edge-conns-ht) (gethash old-edge update-edge-conns-ht))
+		      (setf (gethash update-edge new-edge-conns-ht) (gethash new-edge update-edge-conns-ht))
+		      (remhash old-edge update-edge-conns-ht)
+		      (remhash old-edge new-edge-conns-ht))
+		     (t nil)))))))
+	   
+	     
 ;(defun combine-verticies (edge1 edge2 num-edges adj-lst vertices)
 ;  (let ((edge2-connections-ht (gethash edge2 adj-lst)))
 ;    (maphash #'(lambda (k v)
